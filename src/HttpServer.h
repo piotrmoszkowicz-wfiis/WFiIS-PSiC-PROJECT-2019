@@ -18,7 +18,6 @@ public:
 		bool IsValid() const;
 		void PrintRequestLine() const;
 		void PrintHeaders() const;
-		void ProcessRequest() const;
 
 		struct RequestLine
 		{
@@ -32,6 +31,7 @@ public:
 
 		std::unordered_map<std::string, std::string> headers{};
 
+		// Todo: we should rely on this flag. Currently it's never checked.
 		bool isProcessingDone = false;
 	};
 
@@ -57,7 +57,12 @@ private:
 	static std::vector<char> readFile(const char* path);
 	HttpRequestMessage parseClientRequest(const std::string & str);
 	static std::string fileExtensionToContentType(const std::string & ext);
+	void ProcessRequest(const HttpServer::HttpRequestMessage & httpRequestMsg) const;
 
 private:
 	void* m_socket = nullptr;
+	
+	// When receiving a message the first part of it is ZMQ id, the second is a proper message (we need to call zmq_msg_recv 2 times).
+	// This member is used to cache ZMQ id, because it needs to be used while sending.
+	std::string m_zmqMsgId{};
 };

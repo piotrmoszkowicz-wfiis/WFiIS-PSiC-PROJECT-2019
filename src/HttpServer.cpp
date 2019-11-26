@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <time.h>
-#include <sstream>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -26,9 +25,6 @@ bool HttpServer::Initialize()
 	if(context == NULL) 
 		handleHardZmqError("zmq_ctx_new");
 
-	// ZMQ_STREAM zostalo dodane ekstra - troche dziwne uzycie...
-	// jak odbieramy z ZMQ streama, 1 wiadomosc adresowa o dl 0 i bedzie miala identyfikatory ZMQ i deskryptory, w 2-giej tresc.
-	// przy wysylaniu - zapisac sobie otrzymane deskryptory z otrzymanej wiadomosci, przy sendzie uzyc Multistreama	
 	m_socket  = zmq_socket(context, ZMQ_STREAM);
 	if(m_socket  == NULL) 
 		handleHardZmqError("zmq_socket");
@@ -51,28 +47,33 @@ bool HttpServer::Initialize()
 // Upgrade-Insecure-Requests: 1
 bool HttpServer::Start()
 {
-	std::cout << "Start" << std::endl;	
-
+	std::cout << "[Start] called \n" << std::endl;	
+	unsigned long long loopsAmount = 0;
 	while(true)
 	{
+		++loopsAmount;
+		std::cout << "**While loop** ( amount: " << loopsAmount << ") \n";
 		zmq_msg_t msg;
 		zmq_msg_init(&msg);
+
+		// 1-st msg
 		int numberOfBytes = zmq_msg_recv(&msg, m_socket, 0);
 		if(numberOfBytes == -1)
 			handleHardZmqError("zmq_msg_recv");
 
 		const char *peerAddress = zmq_msg_gets(&msg, "Peer-Address"); 
+		m_zmqMsgId.assign((char*)zmq_msg_data(&msg), numberOfBytes);
 
-		std::string zmqIdsMsg((char*)zmq_msg_data(&msg), numberOfBytes);
-		std::cout << "From :" << peerAddress << "\n" 
-		<< "1st (zmqIdsMsg) message (size: " << zmqIdsMsg.size() << ") received: " << zmqIdsMsg << "\n";
-
+		// 2-nd msg
 		numberOfBytes = zmq_msg_recv(&msg, m_socket, 0);
 		if(numberOfBytes == -1)
 			handleHardZmqError("zmq_msg_recv");
 
 		if(numberOfBytes)
 		{
+			std::cout << "From :" << peerAddress << "\n" 
+			<< "1st (zmqIdsMsg) message (size: " << m_zmqMsgId.size() << ") received: " << m_zmqMsgId << "\n";
+
 			std::string properRequestMsg((char*)zmq_msg_data(&msg), numberOfBytes);
 			std::cout << "2nd (properRequestMsg) message (size: " << properRequestMsg.size() << ") received: " << properRequestMsg << "\n";
 			
@@ -84,7 +85,7 @@ bool HttpServer::Start()
 				continue;
 			}
 
-			httpRequestMessage.ProcessRequest();
+			ProcessRequest(httpRequestMessage);
 		}
 
 
@@ -92,76 +93,6 @@ bool HttpServer::Start()
 	}
 
 	return true;
-}
-
-void HttpServer::HttpRequestMessage::ProcessRequest() const
-{
-	if(requestLine.method == "GET")
-	{
-		std::cout << "Received GET method" << std::endl;
-		HttpResponseMessage httpResponseMessage;
-
-		// get rid of '/' at the beginning
-		auto fileToRead = requestLine.uri.substr(1);
-		std::cout << "fileToRead: [" << fileToRead << "]" << std::endl;
-		bool receivedCorrectPath = true;
-		if(!std::filesystem::is_regular_file(fileToRead))
-		{
-			fileToRead = R"(Strona/NotFound.html)";
-			std::cout << "NOT FOUND. So, fileToRead: [" << fileToRead << "]" << std::endl;
-			receivedCorrectPath = false;
-		}
-
-		std::vector<char> file{};
-		try 
-		{
-			file = readFile(fileToRead.c_str());
-			std::filesystem::path path{fileToRead};
-			const auto contentType = fileExtensionToContentType(path.extension().string());
-			std::cout << "file extension: " << path.extension().string() << ". Content-Type: " << contentType << std::endl;
-			httpResponseMessage.headers.emplace("Content-Type", contentType.c_str());
-			std::cout << "File size: " << std::to_string(file.size()) << "\n";
-			httpResponseMessage.headers.emplace("Content-Length", std::to_string(file.size()));
-			const std::string responseString{file.begin(), file.end()};
-			httpResponseMessage.response = std::move(responseString);
-		}
-		catch(std::ios_base::failure err)
-		{
-			std::cout << err.what() << std::endl;
-			file.clear();
-		}
-
-		if(receivedCorrectPath && !file.empty())
-		{
-			httpResponseMessage.statusLine.codeStatus = "200";
-			httpResponseMessage.statusLine.reason = "OK";
-		}
-		else if(receivedCorrectPath && file.empty())
-		{
-			httpResponseMessage.statusLine.codeStatus = "501";
-			httpResponseMessage.statusLine.reason = "SERVER ERROR";
-		}
-		else if(!receivedCorrectPath)
-		{
-			httpResponseMessage.statusLine.codeStatus = "404";
-			httpResponseMessage.statusLine.reason = "Not Found";
-		}
-	}
-	else if(requestLine.method == "POST")
-	{
-		// std::cout << "Received POST method" << std::endl;
-		// PrintHeaders();
-		// HttpResponseMessage httpResponseMessage;
-		// httpResponseMessage.statusLine.codeStatus = "200";
-		// httpResponseMessage.statusLine.reason = "OK";
-		// httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
-		// httpResponseMessage.headers.emplace("Content-Length", std::to_string(2));
-		// httpResponseMessage.response = "OK";
-
-		
-		// if(!Send((*socketIt).fd, httpResponseMessage.CreateHttpResponseMsg().c_str()))
-		// 	perror("Send error ");
-	}
 }
 
 // function throws an exception ios_base::failure if file does not exist (or something goes wrong)
@@ -182,7 +113,7 @@ std::vector<char> HttpServer::readFile(const char* path)
 
 HttpServer::HttpRequestMessage HttpServer::parseClientRequest(const std::string & str)
 {
-	std::cout << "Start parsing" << std::endl;
+	std::cout << "[parseClientRequest]" << std::endl;
 	std::istringstream iss{str};
 	
 	HttpRequestMessage HttpRequestMessage{};
@@ -240,7 +171,7 @@ HttpServer::HttpRequestMessage HttpServer::parseClientRequest(const std::string 
 	}
 	
 	HttpRequestMessage.PrintRequestLine();
-	HttpRequestMessage.PrintHeaders();	
+	// HttpRequestMessage.PrintHeaders();	
 
 	return HttpRequestMessage;
 }
@@ -294,4 +225,46 @@ std::string HttpServer::fileExtensionToContentType(const std::string & ext)
 	//apply correct charset
 	contentType.append("; charset=UTF-8");
 	return contentType;
+}
+
+void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage & httpRequestMsg) const
+{
+	std::cout << "[ProcessRequest] function \n";
+	if(httpRequestMsg.requestLine.method == "GET")
+	{
+		std::cout << "Received GET method" << std::endl;
+
+		const auto requestedURI = httpRequestMsg.requestLine.uri.substr(1);
+		std::cout << "requestedURI: [" << requestedURI << "]" << std::endl;
+
+		HttpResponseMessage httpResponseMessage;
+		httpResponseMessage.statusLine.codeStatus = "200";
+		httpResponseMessage.statusLine.reason = "OK";
+		httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
+
+		std::stringstream responseStringStream;
+		responseStringStream << "Requested URI is: [" << requestedURI << "]";
+		httpResponseMessage.response = responseStringStream.str();
+		httpResponseMessage.headers.emplace("Content-Length", std::to_string(httpResponseMessage.response.size()));
+
+		std::cout << "ZMQ msg ID: [" << m_zmqMsgId << "] \n";
+		std::cout << "Send 1st part of the message with ZMQ ID \n";
+		if(zmq_send(m_socket, m_zmqMsgId.c_str(), m_zmqMsgId.size(), ZMQ_SNDMORE) == -1 )
+		{
+			std::cout << "Error occurred during zmq_send(): " << zmq_strerror(errno) << "\n";
+			return;
+		}
+
+		const auto httpResponseMsg = httpResponseMessage.CreateHttpResponseMsg();
+
+		// 2-nd message - proper HTTP response message
+		std::cout << "Send 2nd part of the message with a proper HTTP response \n";
+		if(zmq_send(m_socket, httpResponseMsg.c_str(), httpResponseMsg.size(), 0) == -1 )
+		{
+			std::cout << "Error occurred during zmq_send(): " << zmq_strerror(errno) << "\n";
+			return;
+		}
+	}
+
+	return;
 }
