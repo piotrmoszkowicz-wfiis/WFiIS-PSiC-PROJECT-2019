@@ -99,7 +99,7 @@ std::vector<char> HttpServer::readFile(const char *path) {
     return result;
 }
 
-HttpServer::HttpRequestMessage HttpServer::parseClientRequest(const std::string &str) {
+HttpRequestMessage HttpServer::parseClientRequest(const std::string &str) {
     std::cout << "[parseClientRequest]" << std::endl;
     std::istringstream iss{str};
 
@@ -153,36 +153,6 @@ HttpServer::HttpRequestMessage HttpServer::parseClientRequest(const std::string 
     return HttpRequestMessage;
 }
 
-
-bool HttpServer::HttpRequestMessage::IsValid() const {
-    return !requestLine.method.empty() && !requestLine.uri.empty();
-}
-
-void HttpServer::HttpRequestMessage::PrintRequestLine() const {
-    std::cout << "**Printing request line: " << std::endl;
-    std::cout << "Method: [" << requestLine.method << "] " << std::endl;
-    std::cout << "URI: [" << requestLine.uri << "] " << std::endl;
-    std::cout << "HTTP version: [" << requestLine.httpVersion << "] " << std::endl;
-}
-
-void HttpServer::HttpRequestMessage::PrintHeaders() const {
-    std::cout << "**Printing headers: " << std::endl;
-    for (const auto &p : headers)
-        std::cout << p.first << " => " << p.second << '\n';
-}
-
-std::string HttpServer::HttpResponseMessage::CreateHttpResponseMsg() const {
-    std::stringstream ss;
-    ss << statusLine.httpVersion << " " << statusLine.codeStatus << " " << statusLine.reason << "\r\n";
-
-    for (const auto &header : headers)
-        ss << header.first << ": " << header.second << "\r\n";
-
-    ss << "\r\n";
-    ss << response;
-    return ss.str();
-}
-
 std::string HttpServer::fileExtensionToContentType(const std::string &ext) {
     std::string contentType{};
     if (ext.compare(".html") == 0)
@@ -199,7 +169,7 @@ std::string HttpServer::fileExtensionToContentType(const std::string &ext) {
     return contentType;
 }
 
-void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage &httpRequestMsg, bool isValid) const {
+void HttpServer::ProcessRequest(const HttpRequestMessage &httpRequestMsg, bool isValid) const {
     std::cout << "[ProcessRequest] function \n";
 
     HttpResponseMessage httpResponseMessage;
@@ -216,7 +186,32 @@ void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage &httpReques
         httpResponseMessage.statusLine.reason = "Payload Too Large";
         httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
     } else {
-        if (httpRequestMsg.requestLine.method == "GET") {
+        if (httpRequestMsg.requestLine.method == "CONNECT") {
+            std::cout << "Received CONNECT method" << std::endl;
+            // TODO: Add CONNECT handler
+        } else {
+            std::cout << "Received non CONNECT method" << std::endl;
+            const auto requestedURI = httpRequestMsg.requestLine.uri.substr(1);
+            const auto fisRequestedURI = "http://www.fis.agh.edu.pl/" + requestedURI;
+
+            httpResponseMessage.statusLine.codeStatus = "200";
+            httpResponseMessage.statusLine.reason = "OK";
+            httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
+
+            auto fisRequest = HttpRequestMessage{};
+            fisRequest.requestLine = httpRequestMsg.requestLine;
+            fisRequest.requestLine.uri = requestedURI;
+            fisRequest.requestLine.url = "fis.agh.edu.pl";
+            fisRequest.requestLine.tcpUrl = "tcp://149.156.110.3:80";
+            fisRequest.headers = httpRequestMsg.headers;
+
+            auto requester = HttpRequester(fisRequest);
+            auto requester_response = requester.get_data();
+
+            responseStringStream << requester_response;
+            // responseStringStream << "Requested URI is: [" << fisRequestedURI << "] - [" << requestedURI << "]";
+        }
+        /* if (httpRequestMsg.requestLine.method == "GET") {
             std::cout << "Received GET method" << std::endl;
 
             const auto requestedURI = httpRequestMsg.requestLine.uri.substr(1);
@@ -227,7 +222,7 @@ void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage &httpReques
             httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
 
             responseStringStream << "Requested URI is: [" << requestedURI << "]";
-        }
+        } */
     }
 
     httpResponseMessage.response = responseStringStream.str();

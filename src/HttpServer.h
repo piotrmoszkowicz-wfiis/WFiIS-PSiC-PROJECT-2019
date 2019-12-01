@@ -4,6 +4,10 @@
 #include <vector>
 #include <unordered_map>
 
+#include "HttpRequester.h"
+#include "HttpRequestMessage.h"
+#include "HttpResponseMessage.h"
+
 class HttpServer {
 public:
     HttpServer() = default;
@@ -13,44 +17,6 @@ public:
     bool Initialize();
 
     bool Start();
-
-    struct HttpRequestMessage {
-        bool IsValid() const;
-
-        void PrintRequestLine() const;
-
-        void PrintHeaders() const;
-
-        struct RequestLine {
-            // method should always be uppercase
-            std::string method{};
-            std::string uri{};
-            std::string httpVersion{};
-        };
-
-        RequestLine requestLine;
-
-        std::unordered_map<std::string, std::string> headers{};
-
-        // Todo: we should rely on this flag. Currently it's never checked.
-        bool isProcessingDone = false;
-    };
-
-    struct HttpResponseMessage {
-        struct StatusLine {
-            std::string httpVersion = "HTTP/1.1";
-            std::string codeStatus{};
-            std::string reason{}; //OK, DENIED
-        };
-
-        StatusLine statusLine{};
-        std::unordered_map<std::string, std::string> headers{};
-        std::string response{};
-
-        std::string CreateHttpResponseMsg() const;
-    };
-
-
 private:
     // function throws an exception ios_base::failure if file does not exist (or something goes wrong)
     static std::vector<char> readFile(const char *path);
@@ -59,7 +25,7 @@ private:
 
     static std::string fileExtensionToContentType(const std::string &ext);
 
-    void ProcessRequest(const HttpServer::HttpRequestMessage &httpRequestMsg, bool isValid) const;
+    void ProcessRequest(const HttpRequestMessage &httpRequestMsg, bool isValid) const;
 
 private:
     void *m_socket = nullptr;
