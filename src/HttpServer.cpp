@@ -208,7 +208,7 @@ void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage &httpReques
     if (!isValid) {
         std::cout << "[ProcessRequest] Request is not valid - send 501 \n";
         httpResponseMessage.statusLine.codeStatus = "501";
-        httpResponseMessage.statusLine.reason = "Bad Gateway";
+        httpResponseMessage.statusLine.reason = "Not Implemented";
         httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
     } else {
         if (httpRequestMsg.requestLine.method == "GET") {
