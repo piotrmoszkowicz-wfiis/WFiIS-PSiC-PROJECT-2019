@@ -210,6 +210,11 @@ void HttpServer::ProcessRequest(const HttpServer::HttpRequestMessage &httpReques
         httpResponseMessage.statusLine.codeStatus = "501";
         httpResponseMessage.statusLine.reason = "Not Implemented";
         httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
+    } else if (httpRequestMsg.headers.size() > 8000) {
+        std::cout << "[ProcessRequest] Headers payload is too big - send 413 \n";
+        httpResponseMessage.statusLine.codeStatus = "413";
+        httpResponseMessage.statusLine.reason = "Payload Too Large";
+        httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
     } else {
         if (httpRequestMsg.requestLine.method == "GET") {
             std::cout << "Received GET method" << std::endl;
