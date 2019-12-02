@@ -7,8 +7,9 @@
 #include "HttpRequester.h"
 
 std::string HttpRequester::get_data() {
+    std::cout << "HttpRequester::get_data()\n";
     void* context = zmq_ctx_new();
-    void* requester = zmq_socket(context, ZMQ_REQ);
+    void* requester = zmq_socket(context, ZMQ_STREAM); 
 
     auto connect_result = zmq_connect(requester, m_message.requestLine.tcpUrl.c_str());
     if (connect_result == -1) {
@@ -23,7 +24,7 @@ std::string HttpRequester::get_data() {
     }
 
     auto message = m_message.CreateHttpRequestMsg();
-
+    std::cout << "message: [" << message << "]\n";
     auto send_res = zmq_send(requester, message.c_str(), message.size() + 1, 0);
     if (send_res == -1) {
         std::cout << "err send_res" << std::endl << zmq_strerror(zmq_errno());
@@ -41,14 +42,14 @@ std::string HttpRequester::get_data() {
         exit(0);
     }
 
-    auto msg_content = zmq_msg_data(&response);
+    std::string msg_content((char *) zmq_msg_data(&response), recv_res);
 
-    std::cout << "req msg content" << std::endl << msg_content << std::endl;
+    std::cout << "req msg content[" <<  msg_content << "]" << std::endl;
 
     zmq_msg_close(&response);
 
     zmq_close(requester);
     zmq_ctx_destroy(context);
 
-    return std::string((char*)msg_content);
+    return msg_content;
 }
