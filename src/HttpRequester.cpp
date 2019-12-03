@@ -36,15 +36,28 @@ std::string HttpRequester::get_data() {
     zmq_msg_t response;
     zmq_msg_init(&response);
 
+    // 1-st msg
     auto recv_res = zmq_msg_recv(&response, requester, 0);
     if (recv_res == -1) {
         std::cout << "err recv_res" << std::endl << zmq_strerror(zmq_errno());
         exit(0);
     }
 
-    std::string msg_content((char *) zmq_msg_data(&response), recv_res);
+    // 2-nd msg
+    recv_res = zmq_msg_recv(&response, requester, 0);
+    if (recv_res == -1) {
+        std::cout << "err recv_res" << std::endl << zmq_strerror(zmq_errno());
+        exit(0);
+    }
 
-    std::cout << "req msg content[" <<  msg_content << "]" << std::endl;
+    std::string msg_content{};
+    if (recv_res) {
+        msg_content.assign((char *) zmq_msg_data(&response), recv_res);
+        std::cout << "req msg content[" <<  msg_content << "]" << std::endl;
+    }
+    else {
+        std::cout << "****No message received\n";
+    }
 
     zmq_msg_close(&response);
 
