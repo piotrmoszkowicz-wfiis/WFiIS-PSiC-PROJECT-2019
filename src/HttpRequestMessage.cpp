@@ -21,6 +21,16 @@ void HttpRequestMessage::PrintHeaders() const {
         std::cout << p.first << " => " << p.second << '\n';
 }
 
+std::string HttpRequestMessage::getHeaderValue(std::string key) const {
+    std::string value;
+
+    for (const auto &p : headers)
+        if(p.first == key)
+            return p.second;
+
+    return NULL;
+}
+
 std::string HttpRequestMessage::CreateHttpRequestMsg() const {
     std::stringstream ss;
     ss << requestLine.method << " " << requestLine.uri << " " << requestLine.httpVersion << "\r\n";

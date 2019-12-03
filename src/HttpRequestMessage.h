@@ -16,6 +16,8 @@ struct HttpRequestMessage {
 
     void PrintHeaders() const;
 
+    std::string getHeaderValue(std::string key) const;
+
     struct RequestLine {
         // method should always be uppercase
         std::string method{};

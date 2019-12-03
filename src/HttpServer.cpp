@@ -14,6 +14,21 @@ void handleHardZmqError(const char *functionName) {
     abort();
 }
 
+std::string getContentType(std::string response) {
+    std::string defaultContentType = "text/plain";
+
+    std::istringstream iss(response);
+    std::string line;
+
+    while (std::getline(iss, line))
+    {
+        if (line.find("Content-Type") != std::string::npos)
+            return line.substr (line.find(":")+2);
+    }
+
+    return defaultContentType;
+}
+
 HttpServer::~HttpServer() {}
 
 bool HttpServer::Initialize() {
@@ -60,7 +75,9 @@ bool HttpServer::Start() {
         m_zmqMsgId.assign((char *) zmq_msg_data(&msg), numberOfBytes);
 
         // 2-nd msg
-        numberOfBytes = zmq_msg_recv(&msg, m_socket, 0);
+        zmq_msg_t msg2;
+        zmq_msg_init(&msg2);
+        numberOfBytes = zmq_msg_recv(&msg2, m_socket, 0);
         if (numberOfBytes == -1)
             handleHardZmqError("zmq_msg_recv");
 
@@ -68,7 +85,7 @@ bool HttpServer::Start() {
             std::cout << "From :" << peerAddress << "\n"
                       << "1st (zmqIdsMsg) message (size: " << m_zmqMsgId.size() << ") received: " << m_zmqMsgId << "\n";
 
-            std::string properRequestMsg((char *) zmq_msg_data(&msg), numberOfBytes);
+            std::string properRequestMsg((char *) zmq_msg_data(&msg2), numberOfBytes);
             std::cout << "2nd (properRequestMsg) message (size: " << properRequestMsg.size() << ") received: "
                       << properRequestMsg << "\n";
 
@@ -188,41 +205,40 @@ void HttpServer::ProcessRequest(const HttpRequestMessage &httpRequestMsg, bool i
     } else {
         if (httpRequestMsg.requestLine.method == "CONNECT") {
             std::cout << "Received CONNECT method" << std::endl;
-            // TODO: Add CONNECT handler
+
+            auto connectRequest = HttpRequestMessage{};
+            connectRequest.requestLine = httpRequestMsg.requestLine;
+            connectRequest.requestLine.tcpUrl = "tcp://" + httpRequestMsg.requestLine.uri;
+            connectRequest.headers = httpRequestMsg.headers;
+
+            auto requester = HttpRequester(connectRequest);
+            auto requester_response = requester.get_data();
+
+            responseStringStream << requester_response;
         } else {
             std::cout << "Received non CONNECT method" << std::endl;
             const auto requestedURI = httpRequestMsg.requestLine.uri.substr(1);
-            const auto fisRequestedURI = "http://www.fis.agh.edu.pl/" + requestedURI;
 
-            httpResponseMessage.statusLine.codeStatus = "200";
-            httpResponseMessage.statusLine.reason = "OK";
-            httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
+            httpRequestMsg.PrintHeaders();
 
             auto fisRequest = HttpRequestMessage{};
             fisRequest.requestLine = httpRequestMsg.requestLine;
             fisRequest.requestLine.uri = requestedURI;
-            fisRequest.requestLine.url = "fis.agh.edu.pl";
-            fisRequest.requestLine.tcpUrl = "tcp://149.156.110.3:80";
+            fisRequest.requestLine.url = httpRequestMsg.getHeaderValue("Host");
+            fisRequest.requestLine.tcpUrl = "tcp://" + httpRequestMsg.getHeaderValue("Host") + ":80";
             fisRequest.headers = httpRequestMsg.headers;
 
             auto requester = HttpRequester(fisRequest);
             auto requester_response = requester.get_data();
 
-            responseStringStream << requester_response;
-            // responseStringStream << "Requested URI is: [" << fisRequestedURI << "] - [" << requestedURI << "]";
-        }
-        /* if (httpRequestMsg.requestLine.method == "GET") {
-            std::cout << "Received GET method" << std::endl;
-
-            const auto requestedURI = httpRequestMsg.requestLine.uri.substr(1);
-            std::cout << "requestedURI: [" << requestedURI << "]" << std::endl;
-
             httpResponseMessage.statusLine.codeStatus = "200";
             httpResponseMessage.statusLine.reason = "OK";
-            httpResponseMessage.headers.emplace("Content-Type", "text/html; charset=UTF-8");
+            httpResponseMessage.headers.emplace("Content-Type", getContentType(requester_response));
+            httpResponseMessage.headers.emplace("X-Forwarded-For", "[2001:6d8:10:4400::3]:80");
+            httpResponseMessage.headers.emplace("Remote Address", "[2001:6d8:10:4400::3]:80");
 
-            responseStringStream << "Requested URI is: [" << requestedURI << "]";
-        } */
+            responseStringStream << requester_response;
+        }
     }
 
     httpResponseMessage.response = responseStringStream.str();
